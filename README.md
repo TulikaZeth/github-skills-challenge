@@ -26,15 +26,21 @@ manually one record at a time.
 
 ### Repository Components
 
-	`payment-service` telemetry and log records.
-	`cpu_percent`, `memory_percent`, `log_level`, and `message`.
-	response time and 80% CPU or memory utilization, and builds an `ANOMALY`
-	event with the reasons and original record.
-	`EventTopic`.
-	that stores, returns, and clears messages.
-	runs detection, publishes detected events, consumes events, and reports
-the
-	records processed, anomalies detected, and events consumed.
+- Operational data: data/service_data.json contains timestamped
+	payment-service telemetry and log records.
+- Metrics and logs: each record contains response_time_ms, cpu_percent,
+	memory_percent, log_level, and message.
+- Anomaly detection: src/anomaly_detector.py applies response-time, CPU, and
+	memory thresholds and records the reasons for each anomaly.
+- Event production: src/event_producer.py publishes detected events.
+- Event topics: src/event_topic.py provides the in-memory service-events topic.
+- Event consumption: src/event_consumer.py reads events from the topic.
+- Final AIOps processing: src/aiops_pipeline.py loads the data, detects
+	anomalies, publishes and consumes events, and prints the final result.
+
+The purpose of AIOps in this assessment is to turn service telemetry into
+actionable anomaly events and pass those events through a simple streaming
+workflow.
 
 
 Task 2: Analyse Logs and Metrics
@@ -161,6 +167,59 @@ the database connection timeout at 10:06. Their metric values, log messages,
 timestamps, and detection reasons were included in the output. The corrections
 use the existing detector, producer, topic, consumer, and pipeline components;
 no unrelated event-processing implementation was introduced.
+
+Task 7: Reproducing the Demonstration
+
+Run these commands from the repository root. The first command sets the import
+path used by the source modules and tests.
+
+	cd /workspaces/github-skills-challenge
+	export PYTHONPATH="$PWD:$PWD/src"
+
+To inspect the supplied operational data, run:
+
+	python -m json.tool data/service_data.json
+
+To execute the complete AIOps workflow and display its output, run:
+
+	python src/aiops_pipeline.py
+
+The final output should report 10 records processed, 2 anomalies detected, and
+2 events consumed. It should identify the payment service timeout at 10:05 and
+the database connection timeout at 10:06, together with the metric and log
+reasons that caused each event.
+
+To save the same output for later review, run:
+
+	python src/aiops_pipeline.py | tee aiops_pipeline_output.txt
+
+To run the automated checks, run:
+
+	python -m pytest -q
+
+The expected test result is 8 passed. These commands reproduce the documented
+data inspection, anomaly detection, event publication, event consumption, and
+final AIOps output without replacing any of the provided components.
+
+Task 8: Run the Provided Validation
+
+I ran the provided validation with:
+
+	PYTHONPATH="$PWD:$PWD/src" python -m pytest -q
+
+All 8 tests passed. The tests confirmed that normal records are not flagged,
+anomalous records generate ANOMALY events, producers publish events, and
+consumers receive events from their topics.
+
+I also executed the complete workflow with:
+
+	PYTHONPATH=src python src/aiops_pipeline.py
+
+The final run processed 10 operational records, detected 2 anomalies, and
+consumed 2 events. A direct event-flow check also confirmed 2 events published
+to the service-events topic and 2 events consumed. The workflow completed
+successfully and reported the payment service timeout at 10:05 and the database
+connection timeout at 10:06.
 
 ---
 

@@ -26,28 +26,16 @@ manually one record at a time.
 
 ### Repository Components
 
-- Operational data: `data/service_data.json` contains timestamped
 	`payment-service` telemetry and log records.
-- Metrics and logs: Each data record carries `response_time_ms`,
 	`cpu_percent`, `memory_percent`, `log_level`, and `message`.
-- Anomaly detection: `src/anomaly_detector.py` applies thresholds of 500 ms
 	response time and 80% CPU or memory utilization, and builds an `ANOMALY`
 	event with the reasons and original record.
-- Event production: `src/event_producer.py` publishes detected events to an
 	`EventTopic`.
-- Event topics: `src/event_topic.py` provides the in-memory topic abstraction
 	that stores, returns, and clears messages.
-- Event consumption: `src/event_consumer.py` reads messages from a topic.
-- Final AIOps processing: `src/aiops_pipeline.py` loads the JSON records,
 	runs detection, publishes detected events, consumes events, and reports
 the
 	records processed, anomalies detected, and events consumed.
 
-The purpose of AIOps in this assessment is to demonstrate how operational
-telemetry can be analyzed automatically, converted into actionable anomaly
-events, and passed through a simple event-driven processing workflow. The
-pipeline intentionally includes assessment issues around event-topic wiring
-and log-level handling for investigation.
 
 Task 2: Analyse Logs and Metrics
 
@@ -116,6 +104,63 @@ the service's normal range or considering trends over time. A gradual slowdown
 that remains below a threshold could therefore be missed. A useful improvement
 would be to compare recent observations with a service baseline while retaining
 the current threshold checks.
+
+Task 4: Verify the AIOps Event Flow
+
+I ran the provided workflow with data/service_data.json. It processed 10
+records, detected 2 anomalies, and consumed 2 events. The execution printed
+both received anomaly events, including their service, timestamp, type, and
+reasons.
+
+The Event is the anomaly message created by AnomalyDetector when an observation
+has abnormal metrics or a concerning log. The Producer is EventProducer. It
+receives the detected event and passes it to the Topic. The Topic is the
+in-memory EventTopic named service-events, which stores the published event.
+The Consumer is EventConsumer, which reads the event from that same topic.
+The downstream AIOps component is run_pipeline, which collects the consumed
+event in its events_consumed result and prints the event details in the final
+pipeline report.
+
+I also verified the individual handoff using the 10:05 payment-service anomaly.
+Detection produced an event, EventProducer.publish returned true, the event
+was stored on service-events, and EventConsumer.consume returned that event.
+This confirms that the anomaly travelled through detection, production, the
+topic, consumption, and the downstream AIOps result.
+
+The verified flow was: AnomalyDetector created the event for the 10:05 timeout,
+EventProducer received and published it, EventTopic stored it, and
+EventConsumer received and processed it. The consumed event then returned to
+run_pipeline as the downstream AIOps result. The complete run finished with 2
+anomalies detected and 2 events consumed.
+
+telemetry can be analyzed automatically, converted into actionable anomaly
+events, and passed through a simple event-driven processing workflow. The
+pipeline intentionally includes assessment issues around event-topic wiring
+and log-level handling for investigation.
+
+
+Task 5: Investigate and Correct the Workflow
+
+The first problem was in src/anomaly_detector.py. The detector checked for a
+WARNING log level, but the supplied operational data uses ERROR for both timeout
+events. Because of this mismatch, the detector did not include the log event as
+a reason for an anomaly. I corrected the condition so that both WARNING and
+ERROR are treated as concerning log events. I ran the pipeline again and the
+10:05 and 10:06 events were both reported with the reason Concerning log event.
+
+The second problem was in src/aiops_pipeline.py. EventProducer published to the
+service-events topic, while EventConsumer was connected to a separate
+anomaly-events topic. The consumer therefore received zero events even though
+the detector found anomalies. I corrected the workflow by connecting the
+consumer to the existing producer topic. I ran the pipeline again and verified
+that the two detected events were published and consumed successfully.
+
+The final verification processed 10 records, detected 2 anomalies, and consumed
+2 events. The reported anomalies were the payment service timeout at 10:05 and
+the database connection timeout at 10:06. Their metric values, log messages,
+timestamps, and detection reasons were included in the output. The corrections
+use the existing detector, producer, topic, consumer, and pipeline components;
+no unrelated event-processing implementation was introduced.
 
 ---
 

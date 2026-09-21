@@ -80,6 +80,43 @@ memory reaches 91 percent, and the log reports a database connection timeout.
 These two adjacent records indicate a short-lived service or database problem,
 followed by a return to normal behaviour at 10:07.
 
+Task 3: Validate Anomaly Detection and Event Streaming
+
+I used the provided AnomalyDetector with its default thresholds: response time
+above 500 milliseconds, CPU above 80 percent, or memory above 80 percent. I
+then ran the existing AIOps pipeline against data/service_data.json. The
+pipeline processed all 10 observations, created anomaly events for the two
+abnormal observations, published them through the existing EventProducer and
+EventTopic components, and consumed both events successfully.
+
+The first detected anomaly occurred at 10:05. Its response time was 610
+milliseconds, its CPU and memory values were 75 and 70 percent, and its ERROR
+log said Payment service timeout. It was flagged for high response time and a
+concerning log event.
+
+The second detected anomaly occurred at 10:06. Its response time was 640
+milliseconds, CPU was 94 percent, and memory was 91 percent. Its ERROR log said
+Database connection timeout. It was flagged for high response time, high CPU
+utilization, high memory utilization, and a concerning log event.
+
+The remaining eight observations were treated as normal. They had successful
+INFO logs, response times between 120 and 150 milliseconds, CPU between 42 and
+50 percent, and memory between 51 and 57 percent. No normal observation was
+incorrectly flagged, and no expected anomaly in the supplied data was missed
+after ERROR logs were included in the detection reasons.
+
+During validation, I corrected two issues in the provided workflow without
+changing its architecture. The detector now recognizes both WARNING and ERROR
+levels as concerning log events. The consumer now reads from the same existing
+topic used by the producer, so detected events are available to the streaming
+workflow instead of being left on a different in-memory topic.
+
+One limitation is that the detector uses fixed thresholds rather than learning
+the service's normal range or considering trends over time. A gradual slowdown
+that remains below a threshold could therefore be missed. A useful improvement
+would be to compare recent observations with a service baseline while retaining
+the current threshold checks.
+
 ---
 
 &copy; 2025 GitHub &bull; [Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/code_of_conduct.md) &bull; [MIT License](https://gh.io/mit)
